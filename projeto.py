@@ -3,6 +3,7 @@ from deep_translator import GoogleTranslator
 from deepface import DeepFace
 import os
 import cv2
+import numpy as np
 import matplotlib.pyplot as plt
 
 # === Reconhecimento de Emoções em Texto === #
@@ -15,7 +16,6 @@ except Exception as e:
     emotion_detector_text = None
 
 # Função para traduzir texto para inglês
-
 def translate_to_english(text):
     try:
         return GoogleTranslator(source="auto", target="en").translate(text)
@@ -49,6 +49,21 @@ def analyze_text_emotion():
         print(f"Erro ao processar o texto: {e}")
 
 # === Reconhecimento de Emoções em Imagens === #
+# Função para pré-processar imagens
+def preprocess_image(image_path):
+    img = cv2.imread(image_path)
+    if img is None:
+        raise FileNotFoundError("Imagem não encontrada ou inválida.")
+
+    # Redimensionar e converter para RGB
+    img = cv2.resize(img, (640, 480))
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+    # Normalização (opcional, dependendo do modelo usado)
+    img = img / 255.0
+
+    return img
+
 # Função para processar imagens usando DeepFace
 def analyze_image_emotion():
     print("\n=== Reconhecimento de Emoções (Imagem) ===")
@@ -63,13 +78,16 @@ def analyze_image_emotion():
         return
 
     try:
-        # Carregar e processar a imagem com OpenCV
-        img = cv2.imread(image_path)
-        img = cv2.resize(img, (640, 480))
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        # Pré-processar a imagem
+        img = preprocess_image(image_path)
 
         # Usar o DeepFace para analisar emoções na imagem
-        result = DeepFace.analyze(img_path=image_path, actions=["emotion"], enforce_detection=False)
+        result = DeepFace.analyze(
+            img_path=image_path,
+            actions=["emotion"],  # Analisar apenas emoções
+            enforce_detection=True,  # Forçar a deteção de rostos
+            detector_backend="mtcnn"  # Backend para deteção de rosto
+        )
 
         # Garantir que o resultado seja tratado como uma lista (se múltiplas imagens forem processadas)
         if isinstance(result, list):
@@ -77,17 +95,59 @@ def analyze_image_emotion():
 
         # Obter as emoções detetadas
         print("\nEmoções Detetadas (Imagem):")
-        for emotion, score in result["emotion"].items():
-            print(f"{emotion.capitalize()}: {score:.2f}%")
+        emotions = result["emotion"]
+
+        # Traduzir emoções para português
+        translated_emotions = {
+            "angry": "Raiva",
+            "disgust": "Nojo",
+            "fear": "Medo",
+            "happy": "Felicidade",
+            "sad": "Tristeza",
+            "surprise": "Surpresa",
+            "neutral": "Neutro"
+        }
+
+        for emotion, score in emotions.items():
+            print(f"{translated_emotions.get(emotion, emotion).capitalize()}: {score:.2f}%")
 
         # Mostrar a emoção mais dominante
-        dominant_emotion = result["dominant_emotion"].capitalize()
-        print(f"\nEmoção Mais Dominante: {dominant_emotion}")
+        dominant_emotion = result["dominant_emotion"]
+        dominant_emotion_pt = translated_emotions.get(dominant_emotion, dominant_emotion).capitalize()
+        print(f"\nEmoção Mais Dominante: {dominant_emotion_pt}")
 
         # Exibir a imagem analisada
+        plt.figure(figsize=(10, 5))
+
+        # Mostrar a imagem
+        plt.subplot(1, 2, 1)
         plt.imshow(img)
-        plt.title(f"Emoção Dominante: {dominant_emotion}")
+        plt.title(f"Emoção Dominante: {dominant_emotion_pt}")
         plt.axis("off")
+
+        # Gráfico de barras das emoções com cores personalizadas
+        colors = {
+            "angry": "red",
+            "disgust": "green",
+            "fear": "purple",
+            "happy": "yellow",
+            "sad": "blue",
+            "surprise": "orange",
+            "neutral": "gray"
+        }
+        emotion_colors = [colors.get(emotion, "black") for emotion in emotions.keys()]
+
+        plt.subplot(1, 2, 2)
+        plt.bar([translated_emotions.get(emotion, emotion).capitalize() for emotion in emotions.keys()],
+                emotions.values(),
+                color=emotion_colors)
+        plt.title("Distribuição de Emoções")
+        plt.xlabel("Emoções")
+        plt.ylabel("Porcentagem")
+        plt.xticks(rotation=45)
+
+        # Mostrar tudo
+        plt.tight_layout()
         plt.show()
     except Exception as e:
         print(f"Erro ao processar a imagem: {e}")
